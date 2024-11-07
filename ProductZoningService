@@ -1,0 +1,46 @@
+/*
+1. The system automatically detects the country and sets that value in the request headers. 
+2. Design and implement an Apex REST service class (named ProductZoningService) configured to use the endpoint path ProductZoning with wildcard. 
+3. The API should accept CountryCode as a custom header and the ProductCode as an input parameter to return a string value of the permissible 
+fly zones or appropriate response mentioned below
+*/
+@RestResource(urlMapping='/ProductZoning/*')
+global class ProductZoningService {
+    @HttpGet
+    global static String getFlyZoneResult(){
+        RestRequest request  = RestContext.request;
+        system.debug('request ==== '+ request );
+        system.debug('Request URI: ' + request.requestURI);
+        // get country code
+        Map<String, String> params = request.params;
+        String countryCode = request.headers.get('CountryCode');
+        system.debug('CountryCode ==== '+ countryCode );
+        if (countryCode == NULL) {
+            countryCode = 'US'; 
+        }
+        // get product code
+        String productCode = params.get('ProductCode');
+        system.debug('productCode ==== '+ productCode );
+        IF (String.isBlank(productCode) || productCode == NULL) {
+            RETURN 'ProductCode is missing or doesn\'t exist';
+        }
+        
+        List<Product2> products = [SELECT Id, family FROM Product2 WHERE ProductCode = :productCode LIMIT 1];
+        IF (products.isEmpty()) {
+            RETURN 'ProductCode is missing or doesn\'t exist';
+        }
+        String prodFamily = products[0].family;
+        List<Product_Geo_Mapping__mdt> listGeoMappings = [SELECT Permissible_Fly_Zone__c 
+                                                   FROM Product_Geo_Mapping__mdt 
+                                                   WHERE Product_Family__c = :prodFamily 
+                                                   AND Country_Code__c = :countryCode 
+                                                   LIMIT 1
+                                                  ];
+        IF(listGeoMappings.isEmpty()){
+            RETURN 'Confirm with the local authorities';
+        }
+        String flyZoneResult = listGeoMappings[0].Permissible_Fly_Zone__c;
+        RETURN flyZoneResult;
+    }
+    
+}
