@@ -1,0 +1,141 @@
+@isTest
+public class AssetServiceTest {
+    
+    // Utility method to set up test data
+    
+    private static void setupTestData() {
+        // Create an Account
+        Account testAccount = new Account(
+            Name = 'Test Account'
+        );
+        insert testAccount;
+        
+        // Create some test assets with AccountId
+        Asset asset1 = new Asset(
+            Name = 'Test Asset 1',
+            Asset_Identifier__c = 'ASSET001',
+            Status = 'Installed',
+            AccountId = testAccount.Id // Required field
+        );
+        insert asset1;
+        
+        Asset asset2 = new Asset(
+            Name = 'Test Asset 2',
+            Asset_Identifier__c = 'ASSET002',
+            Status = 'Installed',
+            AccountId = testAccount.Id // Required field
+        );
+        insert asset2;
+        
+        // Create insurance records
+        Insurance__c insurance1 = new Insurance__c(
+            //Name = 'Comprehensive Insurance',
+            Coverage__c = 'Comprehensive',
+            Asset__c = asset1.Id
+        );
+        
+         Asset asset3 = new Asset(
+            Name = 'Test Asset 1',
+            Asset_Identifier__c = 'ASSET003',
+            Status = 'Installed',
+            AccountId = testAccount.Id // Required field
+        );
+        insert asset3;
+        Asset asset4 = new Asset(
+            Name = 'Test Asset 1',
+            Asset_Identifier__c = 'ASSET004',
+            Status = 'Installed',
+            AccountId = testAccount.Id // Required field
+        );
+        insert asset4;
+        insert insurance1;
+        
+        Insurance__c insurance2 = new Insurance__c(
+            //Name = 'Basic Insurance',
+            Coverage__c = 'Liability',
+            Asset__c = asset2.Id
+        );
+        insert insurance2;
+        Insurance__c insurance4 = new Insurance__c(
+            //Name = 'Comprehensive Insurance',
+            Coverage__c = 'Comprehensive',
+            Asset__c = asset4.Id
+        );
+        // Create a loss claim for asset1
+        Claim__c existingClaim = new Claim__c(
+            //Name = 'Existing Loss Claim',
+            Asset__c = asset4.Id,
+            Insurance__c = insurance4.Id,
+            Type__c = 'Loss',
+            Status__c = 'New'
+        );
+        insert existingClaim;
+    }
+    
+    
+    @isTest
+    static void testNoAssetFound() {
+        setupTestData();
+        
+        Test.startTest();
+        // Call the method with an invalid asset identifier
+        String result = AssetService.reportLostDevice('INVALID_ASSET');
+        Test.stopTest();
+        
+        // Assert that the method returns 'No device found'
+        System.assertEquals('No device found', result);
+    }
+    
+    @isTest
+    static void testAssetNoInsurance() {
+        setupTestData();
+        
+        Test.startTest();
+        // Call the method with an asset that has no insurance
+        String result = AssetService.reportLostDevice('ASSET003');
+        Test.stopTest();
+        
+        // Assert that the method returns 'No coverage. Asset status adjusted to Lost.'
+        System.assertEquals('No coverage. Asset status adjusted to Lost.', result);
+        
+        // Verify that the asset status was updated to 'Lost'
+        Asset updatedAsset = [SELECT Status FROM Asset WHERE Asset_Identifier__c = 'ASSET003'];
+        System.assertEquals('Lost', updatedAsset.Status);
+    }
+    
+    @isTest
+    static void testAssetWithComprehensiveInsurance() {
+        setupTestData();
+        
+        Test.startTest();
+        // Call the method with an asset that has comprehensive insurance
+        String result = AssetService.reportLostDevice('ASSET001');
+        Test.stopTest();
+        
+        // Verify that a new claim is created and return the claim name
+        //System.assert(result != null && result.contains('Claim'), 'Claim not created correctly');
+        
+        // Verify that the asset status was updated to 'Lost'
+        Asset updatedAsset = [SELECT id,Status FROM Asset WHERE Asset_Identifier__c = 'ASSET001'];
+        Asset updatedAsset4 = [SELECT id,Status FROM Asset WHERE Asset_Identifier__c = 'ASSET004'];
+        System.assertEquals('Lost', updatedAsset.Status);
+        
+        // Verify that a new claim was inserted
+        List<Claim__c> claims = [SELECT Id, Name, Type__c FROM Claim__c WHERE Asset__c = :updatedAsset.Id];
+        System.assertEquals(1, claims.size());
+        System.assertEquals('Loss', claims[0].Type__c);
+    }
+    
+    @isTest
+    static void testClaimAlreadyFiled() {
+        setupTestData();
+        
+        Test.startTest();
+        // Call the method with an asset that already has a loss claim
+        String result = AssetService.reportLostDevice('ASSET004');
+        Test.stopTest();
+        
+        // Assert that the method returns 'already filed'
+        System.assert(result.contains('already filed'), 'Claim should already be filed');
+    }
+}
