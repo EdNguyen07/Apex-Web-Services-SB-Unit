@@ -1,0 +1,73 @@
+@RestResource(urlMapping = '/lost/*')
+global class AssetService {
+    @HttpPost
+    global static String reportLostDevice(String assetIdentifiers){
+        system.debug('assetIdentifiers ==== '+ assetIdentifiers );
+        map<string,Asset> mapAsset = new map <string,Asset>();
+        //query all assets
+        list<asset> listAsset = [select id,Asset_Identifier__c,Status from asset];
+        list<string> listassetIdentifier = new list<string>();
+        
+        for(asset eachAsset : listAsset){
+            mapAsset.put(eachAsset.Asset_Identifier__c,eachAsset);
+            listassetIdentifier.add(eachAsset.Asset_Identifier__c);
+           
+        }
+        Boolean hasIdentifier = listassetIdentifier.contains(assetIdentifiers);
+        if(!hasIdentifier){
+            system.debug('No device found');
+            return 'No device found';
+        }
+        else{
+            //no insurance coverage
+            Asset assets = [SELECT Id, Status 
+                            FROM Asset 
+                            WHERE Asset_Identifier__c = :assetIdentifiers 
+                            LIMIT 1];
+            Boolean hasClaim = FALSE;
+            list<Insurance__c> ins = [select id,name,Coverage__c from Insurance__c where Asset__c =:assets.id LIMIT 1 ];
+            list<claim__c> claims = [select id,type__c,name from claim__c where Asset__c =:assets.id];
+            if(claims.size()>0){
+               for(claim__c varClaim: claims){
+                if(varClaim.type__c == 'Loss'){
+                    system.debug(varClaim.name + ' already filed.');
+                    hasClaim = TRUE;
+                    return varClaim.name + ' already filed.';
+                }
+            } 
+            }
+            
+            
+            if(ins.size()>0 && !hasClaim){
+                if(ins[0].Coverage__c == 'Comprehensive'){
+                    assets.status = 'Lost';
+                    update assets;
+                    Claim__c getClaim = new Claim__c(
+                        Status__c = 'New',
+                        asset__c= assets.id,
+                        insurance__c = ins[0].id,
+                        type__c = 'Loss'   
+                    );
+                    insert getClaim;
+                    Claim__c newClaim = [select id,name from claim__c where id =:getClaim.id limit 1];
+                    return newClaim.name;
+                }
+                else{
+                    assets.status = 'Lost';
+                    update assets;
+                    system.debug('No coverage. Asset status adjusted to Lost.');
+                    return 'No coverage. Asset status adjusted to Lost.';
+                }
+            }
+            
+            else{
+                assets.status = 'Lost';
+                update assets;
+                system.debug('No coverage. Asset status adjusted to Lost.');
+                return 'No coverage. Asset status adjusted to Lost.';
+            }
+        }
+      
+    }
+}
+
